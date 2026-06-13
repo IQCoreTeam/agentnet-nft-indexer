@@ -1,0 +1,11 @@
+node_modules/
+dist/
+/data/
+.env
+.env.*
+!.env.example
+bun.lockb
+*.log
+*.tsbuildinfo
+.DS_Store
+.idea/
