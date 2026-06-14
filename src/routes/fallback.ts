@@ -15,24 +15,27 @@ import type { IndexedItem } from "../types";
 
 export const fallbackRouter = new Hono();
 
-// POST /fallback/scan  { collection, type?, rpc, sort? }
+// POST /fallback/scan  { collection, authority, type?, rpc, sort? }
 // rpc = the caller's own DAS RPC url. We never store it; it's used for this
-// request only. Returns the full collection, supply-sorted by default.
+// request only. `authority` is the collection's update authority — the DAS scan
+// key (our items aren't Metaplex collections, so we search by authority, not
+// group). Returns the full collection, supply-sorted by default.
 fallbackRouter.post("/scan", async (c) => {
-  let body: { collection?: string; type?: string; rpc?: string; sort?: string };
+  let body: { collection?: string; authority?: string; type?: string; rpc?: string; sort?: string };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "invalid JSON body" }, 400);
   }
-  const { collection, rpc } = body;
+  const { collection, authority, rpc } = body;
   if (!collection) return c.json({ error: "collection (mint) required" }, 400);
+  if (!authority) return c.json({ error: "authority (the collection's update authority) required — it's the DAS scan key" }, 400);
   if (!rpc) return c.json({ error: "rpc (your own DAS RPC url) required for a live scan" }, 400);
   const type: IndexedItem["type"] = body.type === "workflow" ? "workflow" : "skill";
 
   let items: IndexedItem[];
   try {
-    ({ items } = await scanCollection(collection, type, [rpc]));
+    ({ items } = await scanCollection(collection, authority, type, [rpc]));
   } catch (e) {
     return c.json({ error: `scan failed: ${e instanceof Error ? e.message : "unknown"}` }, 502);
   }

@@ -24,20 +24,46 @@ export function isDasConfigured(): boolean {
   return DAS_RPC_URLS.length > 0;
 }
 
-/** Each entry the ingest job scans: a collection mint + the type label that
- *  becomes part of every item's identity (skill vs workflow). AgentNet has
- *  exactly two today (plans/onchain-format/tables.md §1). */
+/** Each entry the ingest job scans: a collection mint + its update authority +
+ *  the type label that becomes part of every item's identity (skill vs workflow).
+ *  AgentNet has exactly two today (plans/onchain-format/tables.md §1).
+ *
+ *  We scan by `authority`, NOT by `collection`: our items are Token-2022
+ *  TokenGroup members, which are NOT Metaplex collections, so DAS
+ *  getAssetsByGroup(collection) returns nothing. searchAssets(authorityAddress)
+ *  is the only key that finds them — and it's stable across buys (the buyer
+ *  becomes the owner, but the update authority never changes). The `collection`
+ *  mint is kept only as the item's umbrella label. */
 export interface CollectionConfig {
   type: "skill" | "workflow";
-  collection: string; // the umbrella collection mint
+  collection: string; // the umbrella collection mint (label only)
+  authority: string;  // the collection's update authority — the DAS scan key
 }
 
+// ⚠️ MAINNET SWITCH: when moving off devnet, change ALL of these together —
+// SOLANA_CLUSTER (env → devnet/mainnet-beta), GATEWAY_URL below, and the four
+// SKILLS_*/WORKFLOWS_* env values (collection mints + authorities). They are a
+// matched set: a devnet authority won't resolve on a mainnet gateway, etc.
 export const COLLECTIONS: CollectionConfig[] = [
-  ...(process.env.SKILLS_COLLECTION ? [{ type: "skill" as const, collection: process.env.SKILLS_COLLECTION }] : []),
-  ...(process.env.WORKFLOWS_COLLECTION ? [{ type: "workflow" as const, collection: process.env.WORKFLOWS_COLLECTION }] : []),
+  ...(process.env.SKILLS_COLLECTION && process.env.SKILLS_AUTHORITY
+    ? [{ type: "skill" as const, collection: process.env.SKILLS_COLLECTION, authority: process.env.SKILLS_AUTHORITY }]
+    : []),
+  ...(process.env.WORKFLOWS_COLLECTION && process.env.WORKFLOWS_AUTHORITY
+    ? [{ type: "workflow" as const, collection: process.env.WORKFLOWS_COLLECTION, authority: process.env.WORKFLOWS_AUTHORITY }]
+    : []),
 ];
 
-export const INGEST_INTERVAL_MS = Number(process.env.INGEST_INTERVAL_MS) || 10 * 60 * 1000;
+// The IQLabs gateway that resolves a code-in inscription (the item's json_uri =
+// a tx signature) into the standard NFT JSON. DAS doesn't fetch code-in uris
+// (they're tx sigs, not http urls), so the indexer reads traits through here.
+// ⚠️ MAINNET SWITCH: dev-gateway → gateway (see the matched-set note above).
+export const GATEWAY_URL = process.env.GATEWAY_URL || "https://dev-gateway.iqlabs.dev";
+
+// 5 min default: a full re-scan is one DAS call per ~1000 items and carries
+// supply + traits, so it's cheap; supply ranking is fine being up to 5 min
+// stale. No notify/webhook path — pull-only keeps the attack surface zero and
+// the RPC cost fixed (independent of buy/publish traffic). Override via env.
+export const INGEST_INTERVAL_MS = Number(process.env.INGEST_INTERVAL_MS) || 5 * 60 * 1000;
 // 3009 = this service's assigned host port on iqlabs-prod-01. WORKDIR is /app,
 // so the relative DB path resolves to /app/data/index.db — the mounted volume.
 export const PORT = Number(process.env.PORT) || 3009;

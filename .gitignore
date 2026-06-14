@@ -9,3 +9,4 @@ bun.lockb
 *.tsbuildinfo
 .DS_Store
 .idea/
+scripts/test-scan.ts

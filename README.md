@@ -70,10 +70,57 @@ POST /fallback/scan                  live scan against the caller's own RPC (see
 - `sort` = `supply` (default, most-minted first) | `name` | `recent`
 - `limit` (≤100, default 24) / `offset`
 
+## Consuming from the SDK (`/client`)
+
+The indexer ships a tiny dependency-free HTTP client so the agent-sdk (or a web
+UI) reads the marketplace without re-implementing the query wiring. It imports
+nothing from the SDK, so the two repos stay decoupled.
+
+```ts
+import { IndexerClient } from "agentnet-nft-indexer/client";
+const idx = new IndexerClient("https://nft-index.iqlabs.dev");
+const { items } = await idx.listItems({ type: "skill", traits: [{ trait_type: "category", value: "clean-code" }], sort: "supply" });
+```
+
+`indexerSkillSource` adapts it to the SDK's `searchSkills` enumeration seam. It
+sets `hydrated: true`, which tells `searchSkills` it can **skip its per-mint
+`getMintSupply` loop and `verifyTraits` re-reads** — the items already carry live
+`supply` and `attributes` (the indexer read them straight from the DAS scan).
+That elimination is the whole reason the indexer exists.
+
+```ts
+import { indexerSkillSource } from "agentnet-nft-indexer/client/skillSource";
+const source = indexerSkillSource(baseUrl, (it) => sdkSkillFromIndexerItem(it), "skill");
+await searchSkills(conn, { source }); // no N extra RPCs
+```
+
+### Which SDK function reads what
+
+| SDK function | Source | Why |
+|---|---|---|
+| `searchSkills` (keyword/category/supply) | 🟢 **indexer** (`/items`) | enumerate + trait filter + supply sort in one call; falls back to `dasSource` if the indexer is down. `verifyTraits:true` → 🟡 re-read traits from the mint |
+| `getReputation` / `getLeaderboard` | 🟢 **indexer** (`/items/creators/ranking`) | "famous agent = Σ supply of skills created" — exactly the creator ranking |
+| `readNotes` / `readAgentNotes` / `postNote` | 🔵 **gateway** | IQLabs `reviews` table rows — not the NFT layer |
+| `readSkillText` / `readCodeIn` | 🔵 **gateway** | code-in text decode |
+| `getMintSupply` / `readSkillMintMetadata` (single item) | 🟡 **on-chain direct / gateway** | precise single-mint read; the indexer replaces these only for *list* sort/filter, not authoritative single reads |
+| `publishSkill` / `buySkill` / `unlockWorkflow` / `mint*` / `writeRow` | ⚪ **neither** | chain *writes* — client signs & sends |
+| account / runtime / storage | ⚪ **neither** | wallet / session / CLI — unrelated to reads |
+
 ## Fallback — the index is an accelerator, never a gate
 
 Because the on-chain format stands alone, the indexer is never required to read
-the marketplace. Two fallbacks:
+the marketplace. The fallback is `dasSource` itself — the original
+read-it-yourself path. When the indexer is unreachable (the client's `healthy()`
+check or a request timeout), the SDK swaps `source` back to `dasSource`, which
+does the same `getAssetsByGroup` full-scan against the caller's own RPC.
+
+Key fact confirmed by probing a live DAS RPC: a `getAssetsByGroup` page already
+carries each item's `token_info.supply` **and** `content.metadata.attributes`.
+So the fallback full-scan reproduces both the supply sort and the trait filter —
+it's only *slower* (a full scan per search, vs a cached read), never less
+capable. `dasSource` must be fixed to actually read those fields (PR #4 currently
+discards them); once it does, losing the indexer degrades gracefully to "slower",
+not "broken". Two further fallbacks:
 
 1. **Empty index is a real state.** If the collections aren't minted yet, or DAS
    isn't configured here, `/items` returns an honest empty list (not an error).

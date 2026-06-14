@@ -25,7 +25,7 @@ export async function ingestAll(): Promise<IngestReport> {
   let pruned = 0;
   let skipped = 0;
   for (const c of COLLECTIONS) {
-    const scan = await scanCollection(c.collection, c.type);
+    const scan = await scanCollection(c.collection, c.authority, c.type);
     if (scan.slot > 0 && scan.slot < getCollectionSlot(c.collection)) {
       skipped++;
       continue;
