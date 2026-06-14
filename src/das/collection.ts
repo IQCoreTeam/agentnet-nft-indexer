@@ -51,6 +51,17 @@ interface DasAsset {
   creators?: { address: string; verified?: boolean }[];
   token_info?: { supply?: number; decimals?: number };
   supply?: { print_current_supply?: number } | null;
+  // The raw Token-2022 TokenGroupMember.group — the ACTUAL collection this mint
+  // belongs to. We scan by authority (one wallet may author several collections),
+  // so we must filter the page down to the collection we asked for using this.
+  // (DAS's top-level `grouping.group_value` is a derived/encoded form, not the
+  // raw group mint — don't use it; read token_group_member.group instead.)
+  mint_extensions?: { token_group_member?: { group?: string } };
+}
+
+/** The mint's real collection = its TokenGroupMember.group (raw), or null. */
+function groupOf(a: DasAsset): string | null {
+  return a.mint_extensions?.token_group_member?.group ?? null;
 }
 
 /** The standard NFT JSON a code-in inscription holds (skill-nft-json.md §2). */
@@ -137,9 +148,12 @@ async function toItem(a: DasAsset, collection: string, type: IndexedItem["type"]
 }
 
 /** Fetch one page of a collection by its update authority. `collection` is the
- *  umbrella label stamped on each item; `authority` is the actual DAS scan key.
- *  `urls` is passed through to dasRpc so the same scan can run against a user's
- *  own RPC (the fallback path). Traits are enriched per item via the gateway. */
+ *  collection mint we want; `authority` is the DAS scan key (its update authority).
+ *  Because one authority may have minted SEVERAL collections (ours all share the
+ *  seed wallet), the raw page mixes them — we keep only the assets whose real
+ *  TokenGroupMember.group equals `collection`. `urls` is passed through to dasRpc
+ *  so the same scan can run against a user's own RPC (the fallback path). Traits
+ *  are enriched per item via the gateway. */
 export async function scanCollectionPage(
   collection: string,
   authority: string,
@@ -152,9 +166,13 @@ export async function scanCollectionPage(
     { authorityAddress: authority, page, limit: PAGE_LIMIT },
     urls,
   );
-  const items = await mapLimit(result.items ?? [], GATEWAY_CONCURRENCY, (a) => toItem(a, collection, type));
-  // Stop when a short page comes back — the standard DAS exhaustion check.
-  const nextPage = items.length < PAGE_LIMIT ? null : page + 1;
+  const raw = result.items ?? [];
+  // Keep only this collection's members (same authority can mint several).
+  const mine = raw.filter((a) => groupOf(a) === collection);
+  const items = await mapLimit(mine, GATEWAY_CONCURRENCY, (a) => toItem(a, collection, type));
+  // Exhaustion is judged on the RAW page length, not the filtered count — a page
+  // can be full of other-collection items and still have more pages to come.
+  const nextPage = raw.length < PAGE_LIMIT ? null : page + 1;
   return { items, nextPage, slot: result.last_indexed_slot ?? 0 };
 }
 
