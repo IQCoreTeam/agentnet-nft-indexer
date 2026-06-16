@@ -19,7 +19,7 @@ export interface QueryOpts {
 interface ItemRow {
   mint: string; collection: string; type: string; name: string;
   description: string; image: string | null; creator: string | null;
-  supply: number; attributes: string;
+  supply: number; price: string | null; attributes: string;
 }
 
 function rowToItem(r: ItemRow): IndexedItem {
@@ -28,7 +28,7 @@ function rowToItem(r: ItemRow): IndexedItem {
   return {
     mint: r.mint, collection: r.collection, type: r.type as IndexedItem["type"],
     name: r.name, description: r.description, image: r.image,
-    creator: r.creator, supply: r.supply, attributes,
+    creator: r.creator, supply: r.supply, price: r.price, attributes,
   };
 }
 

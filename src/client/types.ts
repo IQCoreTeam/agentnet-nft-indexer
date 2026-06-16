@@ -18,6 +18,7 @@ export interface IndexerItem {
   image: string | null;
   creator: string | null;
   supply: number;
+  price: string | null; // lamports (decimal string) from the on-chain ItemConfig PDA
   attributes: IndexerTrait[];
 }
 

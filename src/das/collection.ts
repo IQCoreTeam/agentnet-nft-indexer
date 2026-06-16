@@ -14,6 +14,7 @@
 
 import type { IndexedItem, ScanPage, ScanResult, Trait } from "../types";
 import { dasRpc } from "./client";
+import { fetchItemPrices } from "./itemPrice";
 import { GATEWAY_URL } from "../config";
 
 const PAGE_LIMIT = 1000;
@@ -130,7 +131,12 @@ function cleanTraits(attrs: unknown): Trait[] {
  *  from the code-in inscription (resolved via the gateway). The gateway JSON is
  *  the source of truth for traits (DAS can't read code-in uris); DAS supplies
  *  supply + creator. Falls back to DAS metadata if the gateway is unavailable. */
-async function toItem(a: DasAsset, collection: string, type: IndexedItem["type"]): Promise<IndexedItem> {
+async function toItem(
+  a: DasAsset,
+  collection: string,
+  type: IndexedItem["type"],
+  price: string | null,
+): Promise<IndexedItem> {
   const m = a.content?.metadata;
   const code = a.content?.json_uri ? await resolveCodeIn(a.content.json_uri) : null;
   const attributes = cleanTraits(code?.attributes ?? m?.attributes);
@@ -143,6 +149,7 @@ async function toItem(a: DasAsset, collection: string, type: IndexedItem["type"]
     image: code?.image ?? imageOf(a),
     creator: creatorOf(a),
     supply: supplyOf(a),
+    price, // from the ItemConfig PDA (on-chain source of truth), fetched per page
     attributes,
   };
 }
@@ -169,7 +176,13 @@ export async function scanCollectionPage(
   const raw = result.items ?? [];
   // Keep only this collection's members (same authority can mint several).
   const mine = raw.filter((a) => groupOf(a) === collection);
-  const items = await mapLimit(mine, GATEWAY_CONCURRENCY, (a) => toItem(a, collection, type));
+  // Batch-read each item's on-chain price from its ItemConfig PDA (one
+  // getMultipleAccounts per 100), then merge per item. Best-effort: an unpriced
+  // mint just indexes with price = null.
+  const prices = await fetchItemPrices(mine.map((a) => a.id), urls);
+  const items = await mapLimit(mine, GATEWAY_CONCURRENCY, (a) =>
+    toItem(a, collection, type, prices.get(a.id) ?? null),
+  );
   // Exhaustion is judged on the RAW page length, not the filtered count — a page
   // can be full of other-collection items and still have more pages to come.
   const nextPage = raw.length < PAGE_LIMIT ? null : page + 1;

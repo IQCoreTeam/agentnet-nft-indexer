@@ -21,6 +21,10 @@ export interface IndexedItem {
   image: string | null;         // value's shape says where it lives (json §3)
   creator: string | null;       // mint update authority — recovered, not a trait
   supply: number;               // the ranking signal (+1 per buy)
+  // Price in lamports a buyer pays, read from the gate program's ItemConfig PDA
+  // (the on-chain source of truth — buy_item charges exactly this). Not in DAS or
+  // the code-in JSON; we fetch the PDA per item. null = config not found / unread.
+  price: string | null;         // u64 lamports as a decimal string (no JS number overflow)
   attributes: Trait[];          // standard traits — filterable
 }
 

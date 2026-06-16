@@ -12,11 +12,11 @@ export function upsertItems(items: IndexedItem[]): void {
   const db = getDb();
 
   const upItem = db.prepare(`
-    INSERT INTO item (mint, collection, type, name, description, image, creator, supply, attributes)
-    VALUES ($mint, $collection, $type, $name, $description, $image, $creator, $supply, $attributes)
+    INSERT INTO item (mint, collection, type, name, description, image, creator, supply, price, attributes)
+    VALUES ($mint, $collection, $type, $name, $description, $image, $creator, $supply, $price, $attributes)
     ON CONFLICT(mint) DO UPDATE SET
       collection=$collection, type=$type, name=$name, description=$description,
-      image=$image, creator=$creator, supply=$supply, attributes=$attributes
+      image=$image, creator=$creator, supply=$supply, price=$price, attributes=$attributes
   `);
   const delTraits = db.prepare("DELETE FROM item_trait WHERE mint = ?");
   const insTrait = db.prepare("INSERT INTO item_trait (mint, trait_type, value) VALUES (?, ?, ?)");
@@ -34,6 +34,7 @@ export function upsertItems(items: IndexedItem[]): void {
         $image: it.image,
         $creator: it.creator,
         $supply: it.supply,
+        $price: it.price,
         $attributes: JSON.stringify(it.attributes),
       });
       delTraits.run(it.mint);

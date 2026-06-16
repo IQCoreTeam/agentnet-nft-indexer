@@ -64,6 +64,13 @@ export const GATEWAY_URL = process.env.GATEWAY_URL || "https://dev-gateway.iqlab
 // stale. No notify/webhook path — pull-only keeps the attack surface zero and
 // the RPC cost fixed (independent of buy/publish traffic). Override via env.
 export const INGEST_INTERVAL_MS = Number(process.env.INGEST_INTERVAL_MS) || 5 * 60 * 1000;
+
+// The agent-workflow-nft gate program. Its ItemConfig PDA (["item", itemMint])
+// holds each item's price in lamports — the on-chain source of truth buy_item
+// charges. DAS / the code-in JSON don't carry price, so ingest reads this PDA.
+// Devnet default; override for mainnet. Must match AgentNet seed.ts.
+export const WORKFLOW_GATE_PROGRAM_ID =
+  process.env.WORKFLOW_GATE_PROGRAM_ID || "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
 // 3009 = this service's assigned host port on iqlabs-prod-01. WORKDIR is /app,
 // so the relative DB path resolves to /app/data/index.db — the mounted volume.
 export const PORT = Number(process.env.PORT) || 3009;

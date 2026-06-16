@@ -14,6 +14,7 @@
     "ingest": "bun run src/ingest/run-once.ts"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.98.4",
     "hono": "^4.6.0"
   },
   "devDependencies": {

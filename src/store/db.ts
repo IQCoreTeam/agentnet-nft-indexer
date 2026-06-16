@@ -32,9 +32,13 @@ function prepare(d: Database): void {
       image       TEXT,
       creator     TEXT,
       supply      INTEGER NOT NULL DEFAULT 0,
+      price       TEXT,
       attributes  TEXT NOT NULL DEFAULT '[]'
     )
   `);
+  // price was added after launch — bring an existing DB up to schema (SQLite has no
+  // "ADD COLUMN IF NOT EXISTS"; a duplicate-column error means it's already there).
+  try { d.run("ALTER TABLE item ADD COLUMN price TEXT"); } catch { /* column exists */ }
   d.run("CREATE INDEX IF NOT EXISTS idx_item_type_supply ON item(type, supply DESC)");
   d.run("CREATE INDEX IF NOT EXISTS idx_item_creator ON item(creator)");
 
