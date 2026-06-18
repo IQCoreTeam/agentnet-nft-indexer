@@ -66,7 +66,7 @@ function groupOf(a: DasAsset): string | null {
 }
 
 /** The standard NFT JSON a code-in inscription holds (skill-nft-json.md §2). */
-interface CodeInJson {
+export interface CodeInJson {
   name?: string;
   description?: string;
   image?: string;
@@ -76,7 +76,7 @@ interface CodeInJson {
 /** Resolve an item's code-in inscription (json_uri = a tx signature) into its
  *  standard NFT JSON via the gateway. Returns null on any failure — the item is
  *  still indexed with whatever DAS gave us, just without enriched traits. */
-async function resolveCodeIn(jsonUri: string): Promise<CodeInJson | null> {
+export async function resolveCodeIn(jsonUri: string): Promise<CodeInJson | null> {
   try {
     const res = await fetch(`${GATEWAY_URL}/data/${jsonUri}`);
     if (!res.ok) return null;
@@ -121,7 +121,7 @@ function imageOf(a: DasAsset): string | null {
   return a.content?.links?.image ?? a.content?.files?.[0]?.cdn_uri ?? a.content?.files?.[0]?.uri ?? null;
 }
 
-function cleanTraits(attrs: unknown): Trait[] {
+export function cleanTraits(attrs: unknown): Trait[] {
   return Array.isArray(attrs)
     ? attrs.filter((t): t is Trait => !!t && typeof t.trait_type === "string" && typeof t.value === "string")
     : [];

@@ -37,3 +37,38 @@ export async function dasRpc<T>(
   }
   throw lastErr instanceof Error ? lastErr : new Error("DAS request failed");
 }
+
+/** Standard Solana JSON-RPC call with ARRAY params (getProgramAccounts,
+ *  getMultipleAccounts, …). Same endpoint + key-rotation-on-429 as dasRpc; DAS
+ *  and plain RPC share the Helius url. Kept separate from dasRpc only because
+ *  those methods take positional array params, not a named-params object. */
+export async function rpcCall<T>(
+  method: string,
+  params: unknown[],
+  urls: string[] = DAS_RPC_URLS,
+): Promise<T> {
+  if (urls.length === 0) throw new Error("no RPC configured");
+
+  const body = JSON.stringify({ jsonrpc: "2.0", id: "agentnet-indexer", method, params });
+  let lastErr: unknown;
+
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const res = await fetch(urls[i], {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (res.status === 429 && i < urls.length - 1) continue;
+      if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
+      const json = (await res.json()) as { result?: T; error?: { message?: string } };
+      if (json.error) throw new Error(`RPC error: ${json.error.message ?? "unknown"}`);
+      if (json.result === undefined) throw new Error("RPC empty result");
+      return json.result;
+    } catch (e) {
+      lastErr = e;
+      if (i === urls.length - 1) break;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("RPC request failed");
+}

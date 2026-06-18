@@ -1,11 +1,18 @@
-// Ingest: scan every configured collection via DAS into the index, then prune
-// anything that left it. Mirrors iq-gateway's catalog backfill job — a delayed
-// first pass on boot, then a periodic refresh (supply changes on every buy, so
-// re-scanning keeps the supply ranking fresh). Idempotent; safe to run while
-// serving (upserts are transactional).
+// Ingest: scan every configured collection via the GATE PROGRAM into the index,
+// then prune anything that left it. Mirrors iq-gateway's catalog backfill job —
+// a delayed first pass on boot, then a periodic refresh (supply changes on every
+// buy, so re-scanning keeps the supply ranking fresh). Idempotent; safe to run
+// while serving (upserts are transactional).
+//
+// Enumeration source = the gate program's ItemConfig PDAs (one per published
+// item, authority-independent), NOT DAS searchAssets(authority) — the authority
+// scan misses every item whose update authority was migrated to the gate PDA and
+// every skill published by a non-seed wallet. One gate scan covers ALL configured
+// collections at once, so we fan its result out per collection for upsert+prune.
 
 import { COLLECTIONS, INGEST_INTERVAL_MS, isDasConfigured } from "../config";
-import { scanCollection } from "../das/collection";
+import { scanViaGate } from "../chain/gateScan";
+import type { IndexedItem } from "../types";
 import { getCollectionSlot, pruneCollection, setCollectionSlot, upsertItems } from "../store/items";
 
 export interface IngestReport {
@@ -21,19 +28,29 @@ export interface IngestReport {
  *  with slot 0 (RPC didn't report one) always applies; the guard is opt-in on
  *  the data, not a hard requirement. */
 export async function ingestAll(): Promise<IngestReport> {
+  // One authority-independent pass over the gate program → items for every
+  // configured collection. (If this read fails, it throws and the whole pass is
+  // skipped by the caller — we never prune on a partial scan.)
+  const scan = await scanViaGate();
+
+  // Fan the flat result out by collection so each gets its own slot guard +
+  // prune. A collection absent from the scan ends up with an empty list.
+  const byCollection = new Map<string, IndexedItem[]>(COLLECTIONS.map((c) => [c.collection, []]));
+  for (const it of scan.items) byCollection.get(it.collection)?.push(it);
+
   let items = 0;
   let pruned = 0;
   let skipped = 0;
   for (const c of COLLECTIONS) {
-    const scan = await scanCollection(c.collection, c.authority, c.type);
+    const list = byCollection.get(c.collection) ?? [];
     if (scan.slot > 0 && scan.slot < getCollectionSlot(c.collection)) {
       skipped++;
       continue;
     }
-    upsertItems(scan.items);
-    pruned += pruneCollection(c.collection, new Set(scan.items.map((s) => s.mint)));
+    upsertItems(list);
+    pruned += pruneCollection(c.collection, new Set(list.map((s) => s.mint)));
     if (scan.slot > 0) setCollectionSlot(c.collection, scan.slot);
-    items += scan.items.length;
+    items += list.length;
   }
   return { collections: COLLECTIONS.length, items, pruned, skipped };
 }
