@@ -77,4 +77,34 @@ function prepare(d: Database): void {
       tokenize='trigram'
     )
   `);
+
+  // Verified-work links: a GitHub repo a wallet attached to a Skill NFT as proof
+  // of work done with that skill. UNLIKE every other table here, this one is NOT
+  // derived from chain — it is the indexer's own data (the claim "wallet W used
+  // skill S in repo R" lives nowhere on chain), so these rows are a backup target.
+  // One row per (skill, repo): a repo using N skills makes N rows. Stars/forks are
+  // a cached public GitHub signal refreshed by the stats job (src/stats), never a
+  // source of truth — a display/ranking hint only. Ownership is verified at write
+  // time by reading the repo's public `.agentnet` marker (src/routes/workLinks).
+  d.run(`
+    CREATE TABLE IF NOT EXISTS work_link (
+      skill_mint       TEXT NOT NULL,
+      github_repo_id   TEXT NOT NULL,
+      repo_owner       TEXT NOT NULL,
+      repo_name        TEXT NOT NULL,
+      repo_url         TEXT NOT NULL,
+      wallet           TEXT NOT NULL,
+      stars            INTEGER NOT NULL DEFAULT 0,
+      forks            INTEGER NOT NULL DEFAULT 0,
+      stats_updated_at INTEGER NOT NULL DEFAULT 0,
+      created_at       INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (skill_mint, github_repo_id)
+    )
+  `);
+  // skill -> its repos sorted by stars (the "top examples for a skill" read);
+  // wallet -> verified work for the blog/profile; repo_id -> every row to fan a
+  // single stats refresh across all skills a repo is attached to.
+  d.run("CREATE INDEX IF NOT EXISTS idx_worklink_skill ON work_link(skill_mint, stars DESC)");
+  d.run("CREATE INDEX IF NOT EXISTS idx_worklink_wallet ON work_link(wallet)");
+  d.run("CREATE INDEX IF NOT EXISTS idx_worklink_repo ON work_link(github_repo_id)");
 }

@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { countItems, creatorRanking, getItem, queryItems, traitFacets } from "../store/query";
 import type { QueryOpts } from "../store/query";
+import { reposForSkill } from "../store/workLinks";
 
 export const itemsRouter = new Hono();
 
@@ -60,6 +61,13 @@ itemsRouter.get("/facets/:trait_type", (c) => {
 itemsRouter.get("/creators/ranking", (c) => {
   const limit = c.req.query("limit") ? Number(c.req.query("limit")) : undefined;
   return c.json({ creators: creatorRanking(limit) });
+});
+
+// GET /items/:mint/repos — verified-work repos attached to this skill, most-
+// starred first. Registered before the /:mint catch-all (more specific path).
+itemsRouter.get("/:mint/repos", (c) => {
+  const limit = c.req.query("limit") ? Number(c.req.query("limit")) : undefined;
+  return c.json({ mint: c.req.param("mint"), repos: reposForSkill(c.req.param("mint"), limit) });
 });
 
 // GET /items/:mint — one item by its mint (= NFT id). Last: it's the catch-all.

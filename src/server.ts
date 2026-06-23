@@ -10,9 +10,11 @@ import { logger } from "hono/logger";
 import { PORT } from "./config";
 import { getDb } from "./store/db";
 import { startIngestJob } from "./ingest";
+import { startStatsJob } from "./stats";
 import { itemsRouter } from "./routes/items";
 import { fallbackRouter } from "./routes/fallback";
 import { healthRouter } from "./routes/health";
+import { workLinksRouter } from "./routes/workLinks";
 
 getDb(); // open + migrate the index before serving
 
@@ -23,9 +25,11 @@ app.use("*", logger());
 app.route("/", healthRouter);
 app.route("/items", itemsRouter);
 app.route("/fallback", fallbackRouter);
-app.get("/", (c) => c.json({ service: "agentnet-nft-indexer", endpoints: ["/health", "/items", "/items/:mint", "/items/facets/:trait_type", "/items/creators/ranking", "/fallback/scan"] }));
+app.route("/work-links", workLinksRouter);
+app.get("/", (c) => c.json({ service: "agentnet-nft-indexer", endpoints: ["/health", "/items", "/items/:mint", "/items/:mint/repos", "/items/facets/:trait_type", "/items/creators/ranking", "/work-links", "/fallback/scan"] }));
 
 startIngestJob();
+startStatsJob();
 
 console.log(`agentnet-nft-indexer on :${PORT}`);
 

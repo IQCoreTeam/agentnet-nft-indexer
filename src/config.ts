@@ -65,6 +65,14 @@ export const GATEWAY_URL = process.env.GATEWAY_URL || "https://dev-gateway.iqlab
 // the RPC cost fixed (independent of buy/publish traffic). Override via env.
 export const INGEST_INTERVAL_MS = Number(process.env.INGEST_INTERVAL_MS) || 5 * 60 * 1000;
 
+// Verified-work (src/routes/workLinks, src/stats): a service GitHub token for
+// PUBLIC repo reads only — it raises the rate limit for the `.agentnet` marker
+// check + star/fork refresh. Optional (unauthenticated reads work at a lower
+// limit). The user's own PAT is NEVER sent here. Stars move slowly and are only
+// a display hint, so the refresh runs on a slow cadence (default 12h).
+export const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
+export const STATS_INTERVAL_MS = Number(process.env.STATS_INTERVAL_MS) || 12 * 60 * 60 * 1000;
+
 // The agent-workflow-nft gate program. Its ItemConfig PDA (["item", itemMint])
 // holds each item's price in lamports — the on-chain source of truth buy_item
 // charges. DAS / the code-in JSON don't carry price, so ingest reads this PDA.
