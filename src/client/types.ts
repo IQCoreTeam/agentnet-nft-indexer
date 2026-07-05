@@ -20,6 +20,7 @@ export interface IndexerItem {
   supply: number;
   price: string | null; // lamports (decimal string) from the on-chain ItemConfig PDA
   attributes: IndexerTrait[];
+  stars?: number; // summed GitHub stars across repos that use this skill (issue #89)
 }
 
 /** A page from GET /items. */

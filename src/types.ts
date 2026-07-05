@@ -26,6 +26,7 @@ export interface IndexedItem {
   // the code-in JSON; we fetch the PDA per item. null = config not found / unread.
   price: string | null;         // u64 lamports as a decimal string (no JS number overflow)
   attributes: Trait[];          // standard traits — filterable
+  stars: number;                // summed GitHub stars across repos that use this skill (issue #89)
 }
 
 /** One page of a collection scan: the items, the cursor to continue, and the

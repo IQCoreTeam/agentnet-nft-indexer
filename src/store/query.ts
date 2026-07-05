@@ -11,7 +11,7 @@ export interface QueryOpts {
   q?: string;                          // keyword on name + description
   traits?: { trait_type: string; value: string }[]; // ANDed (each must match)
   creator?: string;
-  sort?: "supply" | "name" | "recent"; // default supply DESC (= most-minted)
+  sort?: "supply" | "name" | "recent" | "stars"; // default supply DESC (= most-minted)
   limit?: number;
   offset?: number;
 }
@@ -19,7 +19,7 @@ export interface QueryOpts {
 interface ItemRow {
   mint: string; collection: string; type: string; name: string;
   description: string; image: string | null; creator: string | null;
-  supply: number; price: string | null; attributes: string;
+  supply: number; price: string | null; attributes: string; stars: number;
 }
 
 function rowToItem(r: ItemRow): IndexedItem {
@@ -28,14 +28,25 @@ function rowToItem(r: ItemRow): IndexedItem {
   return {
     mint: r.mint, collection: r.collection, type: r.type as IndexedItem["type"],
     name: r.name, description: r.description, image: r.image,
-    creator: r.creator, supply: r.supply, price: r.price, attributes,
+    creator: r.creator, supply: r.supply, price: r.price, attributes, stars: r.stars ?? 0,
   };
 }
+
+// Summed GitHub stars per skill (issue #89), deduped by repo since a repo's stars are
+// the repo's, not the link's, and a repo can back a skill via multiple links. Folded in
+// as a LEFT JOIN so the item list can sort and page on it in one query. This is the one
+// place the per-skill aggregation lives (see workLinks.ts note).
+const STARS_JOIN = ` LEFT JOIN (
+  SELECT skill_mint, SUM(stars) AS stars FROM (
+    SELECT skill_mint, github_repo_id, MAX(stars) AS stars FROM work_link GROUP BY skill_mint, github_repo_id
+  ) GROUP BY skill_mint
+) s ON s.skill_mint = i.mint`;
 
 const ORDER: Record<NonNullable<QueryOpts["sort"]>, string> = {
   supply: "i.supply DESC, i.name ASC",
   name: "i.name ASC",
   recent: "i.rowid DESC",
+  stars: "COALESCE(s.stars, 0) DESC, i.supply DESC, i.name ASC",
 };
 
 /** Build the WHERE fragments + args shared by query() and count(). Keyword
@@ -80,7 +91,7 @@ export function queryItems(opts: QueryOpts): IndexedItem[] {
   const order = ORDER[opts.sort ?? "supply"];
   const limit = Math.min(Math.max(opts.limit ?? 24, 1), 100);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const sql = `SELECT i.* FROM item i${joins} ${where} ORDER BY ${order} LIMIT ? OFFSET ?`;
+  const sql = `SELECT i.*, COALESCE(s.stars, 0) AS stars FROM item i${joins}${STARS_JOIN} ${where} ORDER BY ${order} LIMIT ? OFFSET ?`;
   const rows = getDb().query<ItemRow, (string | number)[]>(sql).all(...args, limit, offset);
   return rows.map(rowToItem);
 }
@@ -92,7 +103,7 @@ export function countItems(opts: QueryOpts): number {
 }
 
 export function getItem(mint: string): IndexedItem | null {
-  const r = getDb().query<ItemRow, [string]>("SELECT * FROM item WHERE mint = ?").get(mint);
+  const r = getDb().query<ItemRow, [string]>(`SELECT i.*, COALESCE(s.stars, 0) AS stars FROM item i${STARS_JOIN} WHERE i.mint = ?`).get(mint);
   return r ? rowToItem(r) : null;
 }
 

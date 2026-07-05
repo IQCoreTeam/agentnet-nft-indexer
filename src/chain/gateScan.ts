@@ -166,6 +166,7 @@ export async function scanViaGate(urls?: string[]): Promise<ScanResult> {
       supply: p.supply,
       price: g.price,
       attributes: cleanTraits(code?.attributes),
+      stars: 0, // live fallback scan has no work_link data; stars is a read-time join
     };
   });
 

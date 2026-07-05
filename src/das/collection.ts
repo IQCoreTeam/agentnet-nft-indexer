@@ -151,6 +151,7 @@ async function toItem(
     supply: supplyOf(a),
     price, // from the ItemConfig PDA (on-chain source of truth), fetched per page
     attributes,
+    stars: 0, // stored item carries no stars; the read-side STARS_JOIN computes it
   };
 }
 

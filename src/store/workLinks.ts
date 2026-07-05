@@ -94,6 +94,34 @@ export function workLinksForWallet(wallet: string, limit = 100): WorkLink[] {
     .all(wallet, Math.min(Math.max(limit, 1), 500));
 }
 
+/** Summed verified-work stars per wallet — the agent directory's reputation axis in ONE read
+ *  (instead of a /work-links?wallet lookup per agent). A repo backing N skills has N rows with
+ *  the same stars, so dedupe per (wallet, repo) first, then sum. Pass `wallets` to limit the
+ *  result to a leaderboard slice; omit for every wallet. */
+export function starsByWallet(wallets?: string[]): Record<string, number> {
+  const slice = wallets && wallets.length ? wallets : null;
+  const filter = slice ? `WHERE wallet IN (${slice.map(() => "?").join(",")})` : "";
+  const sql = `
+    SELECT wallet, SUM(stars) AS stars FROM (
+      SELECT wallet, github_repo_id, MAX(stars) AS stars
+      FROM work_link
+      ${filter}
+      GROUP BY wallet, github_repo_id
+    ) AS per_repo
+    GROUP BY wallet
+  `;
+  const rows = getDb()
+    .query<{ wallet: string; stars: number }, string[]>(sql)
+    .all(...(slice ?? []));
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.wallet] = r.stars ?? 0;
+  return out;
+}
+
+// Per-skill star aggregation (issue #89) is folded straight into the item payload by
+// query.ts (STARS_JOIN) rather than a separate function — one source so the card, the
+// sort, and the detail all read the same number. The repo list itself is reposForSkill.
+
 /** Distinct repos in the index (one entry however many skills it backs) — the
  *  worklist for the stats refresh job. */
 export function distinctRepos(): { github_repo_id: string; repo_owner: string; repo_name: string }[] {

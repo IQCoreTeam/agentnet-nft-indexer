@@ -33,7 +33,7 @@ function readOpts(c: Context): QueryOpts {
     q: c.req.query("q") || undefined,
     creator: c.req.query("creator") || undefined,
     traits: parseTraits(c.req.queries("trait") ?? []),
-    sort: sort === "name" || sort === "recent" ? sort : "supply",
+    sort: sort === "name" || sort === "recent" || sort === "stars" ? sort : "supply",
     limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined,
     offset: c.req.query("offset") ? Number(c.req.query("offset")) : undefined,
   };
