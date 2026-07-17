@@ -40,10 +40,12 @@ export interface CollectionConfig {
   authority: string;  // the collection's update authority — the DAS scan key
 }
 
-// ⚠️ MAINNET SWITCH: when moving off devnet, change ALL of these together —
-// SOLANA_CLUSTER (env → devnet/mainnet-beta), GATEWAY_URL below, and the four
-// SKILLS_*/WORKFLOWS_* env values (collection mints + authorities). They are a
-// matched set: a devnet authority won't resolve on a mainnet gateway, etc.
+// These defaults now target MAINNET (devnet retired 2026-07-17). They stay a
+// matched set — SOLANA_CLUSTER (env → mainnet-beta), GATEWAY_URL below, the gate
+// program id, and the four SKILLS_*/WORKFLOWS_* env values (collection mints +
+// authorities) must all be one network: a devnet authority won't resolve on a
+// mainnet gateway, etc. The collections are env-only (no default) — set them on
+// the deploy host.
 export const COLLECTIONS: CollectionConfig[] = [
   ...(process.env.SKILLS_COLLECTION && process.env.SKILLS_AUTHORITY
     ? [{ type: "skill" as const, collection: process.env.SKILLS_COLLECTION, authority: process.env.SKILLS_AUTHORITY }]
@@ -56,8 +58,8 @@ export const COLLECTIONS: CollectionConfig[] = [
 // The IQLabs gateway that resolves a code-in inscription (the item's json_uri =
 // a tx signature) into the standard NFT JSON. DAS doesn't fetch code-in uris
 // (they're tx sigs, not http urls), so the indexer reads traits through here.
-// ⚠️ MAINNET SWITCH: dev-gateway → gateway (see the matched-set note above).
-export const GATEWAY_URL = process.env.GATEWAY_URL || "https://dev-gateway.iqlabs.dev";
+// Mainnet gateway (env override wins). See the matched-set note above.
+export const GATEWAY_URL = process.env.GATEWAY_URL || "https://gateway.iqlabs.dev";
 
 // 5 min default: a full re-scan is one DAS call per ~1000 items and carries
 // supply + traits, so it's cheap; supply ranking is fine being up to 5 min
@@ -76,9 +78,9 @@ export const STATS_INTERVAL_MS = Number(process.env.STATS_INTERVAL_MS) || 12 * 6
 // The agent-workflow-nft gate program. Its ItemConfig PDA (["item", itemMint])
 // holds each item's price in lamports — the on-chain source of truth buy_item
 // charges. DAS / the code-in JSON don't carry price, so ingest reads this PDA.
-// Devnet default; override for mainnet. Must match AgentNet seed.ts.
+// Mainnet default (env override wins). Must match AgentNet seed.ts.
 export const WORKFLOW_GATE_PROGRAM_ID =
-  process.env.WORKFLOW_GATE_PROGRAM_ID || "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
+  process.env.WORKFLOW_GATE_PROGRAM_ID || "8YmcHuCx323RtqC8mzTJ5CH4oVT8mPKJ7xarcPKbdgof";
 // 3009 = this service's assigned host port on iqlabs-prod-01. WORKDIR is /app,
 // so the relative DB path resolves to /app/data/index.db — the mounted volume.
 export const PORT = Number(process.env.PORT) || 3009;
