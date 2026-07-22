@@ -15,6 +15,7 @@ import { itemsRouter } from "./routes/items";
 import { fallbackRouter } from "./routes/fallback";
 import { healthRouter } from "./routes/health";
 import { workLinksRouter } from "./routes/workLinks";
+import { mediaRouter } from "./routes/media";
 
 getDb(); // open + migrate the index before serving
 
@@ -26,7 +27,8 @@ app.route("/", healthRouter);
 app.route("/items", itemsRouter);
 app.route("/fallback", fallbackRouter);
 app.route("/work-links", workLinksRouter);
-app.get("/", (c) => c.json({ service: "agentnet-nft-indexer", endpoints: ["/health", "/items", "/items/:mint", "/items/:mint/repos", "/items/facets/:trait_type", "/items/creators/ranking", "/work-links", "/fallback/scan"] }));
+app.route("/", mediaRouter);
+app.get("/", (c) => c.json({ service: "agentnet-nft-indexer", endpoints: ["/health", "/items", "/items/:mint", "/items/:mint/repos", "/items/facets/:trait_type", "/items/creators/ranking", "/work-links", "/work-links/stars", "/fallback/scan", "/image/:mint.png", "/metadata/:mint"] }));
 
 startIngestJob();
 startStatsJob();

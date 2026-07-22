@@ -5,6 +5,7 @@ COPY package.json bun.lock* ./
 RUN bun install
 
 COPY src ./src
+COPY fonts ./fonts
 
 # The index DB lives here; mounted as a named volume in prod so a redeploy that
 # swaps the image keeps the data. Created up front so the first boot can write

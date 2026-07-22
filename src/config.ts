@@ -81,6 +81,11 @@ export const STATS_INTERVAL_MS = Number(process.env.STATS_INTERVAL_MS) || 12 * 6
 // Mainnet default (env override wins). Must match AgentNet seed.ts.
 export const WORKFLOW_GATE_PROGRAM_ID =
   process.env.WORKFLOW_GATE_PROGRAM_ID || "8YmcHuCx323RtqC8mzTJ5CH4oVT8mPKJ7xarcPKbdgof";
+// Public base of THIS service, baked into /metadata responses as the absolute
+// image URL (marketplaces resolve image against nothing, so it must be
+// absolute). Env override for local runs.
+export const PUBLIC_URL = (process.env.PUBLIC_URL || "https://nft-index.iqlabs.dev").replace(/\/+$/, "");
+
 // 3009 = this service's assigned host port on iqlabs-prod-01. WORKDIR is /app,
 // so the relative DB path resolves to /app/data/index.db — the mounted volume.
 export const PORT = Number(process.env.PORT) || 3009;
