@@ -73,12 +73,30 @@ export interface CodeInJson {
   attributes?: Trait[];
 }
 
-/** Resolve an item's code-in inscription (json_uri = a tx signature) into its
- *  standard NFT JSON via the gateway. Returns null on any failure — the item is
- *  still indexed with whatever DAS gave us, just without enriched traits. */
+// A mint uri carries the inscription signature in one of two shapes: legacy
+// uris are the bare tx signature, current uris are the gateway presentation
+// URL "{gateway}/skill/{mint}/{sig}" whose LAST path segment is the signature.
+const SIG_SHAPE = /^[1-9A-HJ-NP-Za-km-z]{80,90}$/;
+
+export function inscriptionSigOf(uri: string): string | null {
+  if (SIG_SHAPE.test(uri)) return uri;
+  if (/^https?:\/\//.test(uri)) {
+    const tail = uri.split(/[?#]/, 1)[0].replace(/\/+$/, "").split("/").pop() ?? "";
+    const sig = tail.replace(/\.(png|json)$/, "");
+    if (SIG_SHAPE.test(sig)) return sig;
+  }
+  return null;
+}
+
+/** Resolve an item's code-in inscription (json_uri = a bare tx signature or a
+ *  gateway skill URL carrying one) into its standard NFT JSON via the gateway's
+ *  raw /data endpoint. Returns null on any failure — the item is still indexed
+ *  with whatever DAS gave us, just without enriched traits. */
 export async function resolveCodeIn(jsonUri: string): Promise<CodeInJson | null> {
+  const sig = inscriptionSigOf(jsonUri);
+  if (!sig) return null;
   try {
-    const res = await fetch(`${GATEWAY_URL}/data/${jsonUri}`);
+    const res = await fetch(`${GATEWAY_URL}/data/${sig}`);
     if (!res.ok) return null;
     const body = (await res.json()) as { data?: string | null };
     if (!body.data) return null;
