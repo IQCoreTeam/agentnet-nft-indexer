@@ -15,7 +15,7 @@
 import type { IndexedItem, ScanPage, ScanResult, Trait } from "../types";
 import { dasRpc } from "./client";
 import { fetchItemPrices } from "./itemPrice";
-import { GATEWAY_URL } from "../config";
+import { BROWSER_URL, GATEWAY_URL } from "../config";
 
 const PAGE_LIMIT = 1000;
 // Cap concurrent gateway fetches: a full page maps to one /data/{sig} call per
@@ -86,6 +86,14 @@ export function inscriptionSigOf(uri: string): string | null {
     if (SIG_SHAPE.test(sig)) return sig;
   }
   return null;
+}
+
+/** The rendered card PNG for a mint (the browser render layer). Derivable from
+ *  mint + inscription sig alone, so every item gets an image even though the
+ *  on-chain JSON deliberately carries none (no hostname baked into chain data). */
+export function cardImageUrl(mint: string, uri: string | null | undefined): string | null {
+  const sig = uri ? inscriptionSigOf(uri) : null;
+  return sig ? `${BROWSER_URL}/skill/${mint}/${sig}.png` : null;
 }
 
 /** Resolve an item's code-in inscription (json_uri = a bare tx signature or a
@@ -164,7 +172,7 @@ async function toItem(
     type,
     name: (code?.name ?? m?.name)?.trim() || a.id,
     description: code?.description ?? m?.description ?? "",
-    image: code?.image ?? imageOf(a),
+    image: code?.image ?? cardImageUrl(a.id, a.content?.json_uri) ?? imageOf(a),
     creator: creatorOf(a),
     supply: supplyOf(a),
     price, // from the ItemConfig PDA (on-chain source of truth), fetched per page

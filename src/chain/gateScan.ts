@@ -23,7 +23,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { COLLECTIONS, WORKFLOW_GATE_PROGRAM_ID } from "../config";
 import { rpcCall } from "../das/client";
-import { resolveCodeIn, cleanTraits } from "../das/collection";
+import { resolveCodeIn, cleanTraits, cardImageUrl } from "../das/collection";
 import type { IndexedItem, ScanResult } from "../types";
 
 // ItemConfig (Anchor): disc(8) + bump(1) + item_mint(32) + creator(32) + price(u64 LE) + …
@@ -161,7 +161,7 @@ export async function scanViaGate(urls?: string[]): Promise<ScanResult> {
       type: byGroup.get(group)!,
       name: (code?.name ?? p.name)?.trim() || g.mint,
       description: code?.description ?? "",
-      image: code?.image ?? null,
+      image: code?.image ?? cardImageUrl(g.mint, p.uri),
       creator: g.creator, // ItemConfig.creator = the true publisher (NOT the migrated mint authority)
       supply: p.supply,
       price: g.price,

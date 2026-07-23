@@ -61,6 +61,10 @@ export const COLLECTIONS: CollectionConfig[] = [
 // Mainnet gateway (env override wins). See the matched-set note above.
 export const GATEWAY_URL = process.env.GATEWAY_URL || "https://gateway.iqlabs.dev";
 
+// Render layer for generated card PNGs (the human-facing sibling of the gateway
+// cache layer). Items link their `image` here as /skill/{mint}/{sig}.png.
+export const BROWSER_URL = process.env.BROWSER_URL || "https://browser.iqlabs.dev";
+
 // 5 min default: a full re-scan is one DAS call per ~1000 items and carries
 // supply + traits, so it's cheap; supply ranking is fine being up to 5 min
 // stale. No notify/webhook path — pull-only keeps the attack surface zero and
