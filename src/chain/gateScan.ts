@@ -23,16 +23,12 @@
 import { PublicKey } from "@solana/web3.js";
 import { COLLECTIONS, WORKFLOW_GATE_PROGRAM_ID } from "../config";
 import { rpcCall } from "../das/client";
+import { decodeItemConfig } from "./itemConfig";
 import { resolveCodeIn, cleanTraits, cardImageUrl } from "../das/collection";
 import type { IndexedItem, ScanResult } from "../types";
 
 // ItemConfig (Anchor): disc(8) + bump(1) + item_mint(32) + creator(32) + price(u64 LE) + …
 const ITEM_CONFIG_SIZE = 597;
-const ITEM_CONFIG_DISC = "698e3c32e6c8af4b"; // sha256("account:ItemConfig")[..8], observed on-chain
-const OFF_MINT = 8 + 1; // 9
-const OFF_CREATOR = OFF_MINT + 32; // 41
-const OFF_PRICE = OFF_CREATOR + 32; // 73
-
 const MGA_BATCH = 100; // getMultipleAccounts caps at 100 addresses per call
 const GATEWAY_CONCURRENCY = 8; // gentle on the gateway (one /data/{sig} per item)
 
@@ -57,7 +53,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 interface GpaAccount {
-  account: { data: [string, string] }; // [base64, "base64"]
+  account: { owner: string; data: [string, string] }; // [base64, "base64"]
 }
 
 /** Enumerate every ItemConfig PDA on the gate program and decode the fields we
@@ -73,14 +69,9 @@ async function listGateItems(urls?: string[]): Promise<{ items: GateItem[]; slot
   );
   const items: GateItem[] = [];
   for (const a of res.value ?? []) {
-    const buf = Buffer.from(a.account.data[0], "base64");
-    if (buf.length < OFF_PRICE + 8) continue;
-    if (buf.subarray(0, 8).toString("hex") !== ITEM_CONFIG_DISC) continue; // skip non-ItemConfig (e.g. a global config of the same size)
-    items.push({
-      mint: new PublicKey(buf.subarray(OFF_MINT, OFF_MINT + 32)).toBase58(),
-      creator: new PublicKey(buf.subarray(OFF_CREATOR, OFF_CREATOR + 32)).toBase58(),
-      price: buf.readBigUInt64LE(OFF_PRICE).toString(),
-    });
+    if (a.account.owner !== WORKFLOW_GATE_PROGRAM_ID) continue;
+    const config = decodeItemConfig(Buffer.from(a.account.data[0], "base64"));
+    if (config) items.push(config);
   }
   return { items, slot: res.context?.slot ?? 0 };
 }
