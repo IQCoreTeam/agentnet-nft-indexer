@@ -1,4 +1,4 @@
-// Read each item's on-chain price from the gate program's ItemConfig PDA.
+// Read each item's on-chain creator and price from the gate program's ItemConfig PDA.
 //
 // Price is NOT in DAS or the code-in JSON — it lives in the agent-workflow-nft
 // program's config account at PDA ["item", itemMint]. buy_item charges exactly
@@ -7,8 +7,8 @@
 // decode the u64 `price` field by its fixed offset.
 //
 // ItemConfig layout (Anchor): disc(8) + bump(1) + item_mint(32) + creator(32)
-// + price(u64 LE, 8) + … → price starts at byte 73. We read only that u64; the
-// rest (required_skills) isn't needed for pricing.
+// + price(u64 LE, 8) + … → price starts at byte 73. Creator and price come from this layout;
+// metadata authority can rotate independently and is never a payout identity.
 
 import { PublicKey } from "@solana/web3.js";
 import { WORKFLOW_GATE_PROGRAM_ID, DAS_RPC_URLS } from "../config";
@@ -26,17 +26,26 @@ function itemConfigPda(itemMint: string): PublicKey {
   return PublicKey.findProgramAddressSync([ITEM_SEED, new PublicKey(itemMint).toBuffer()], programId())[0];
 }
 
-/** Decode the u64 price (lamports) from a base64 ItemConfig account, as a decimal
- *  string. Returns null if the account is missing or too short (not a config). */
-function decodePrice(base64: string | null | undefined): string | null {
-  if (!base64) return null;
-  const buf = Buffer.from(base64, "base64");
-  if (buf.length < PRICE_OFFSET + 8) return null;
-  return buf.readBigUInt64LE(PRICE_OFFSET).toString();
+export interface ItemConfigFields {
+  mint: string;
+  creator: string;
+  price: string;
 }
 
+/** Shared layout for both catalog scan paths. Metadata authority is not creator. */
+export function decodeItemConfig(data: Buffer): ItemConfigFields | null {
+  if (data.length < PRICE_OFFSET + 8 || data.subarray(0, 8).toString("hex") !== "698e3c32e6c8af4b") return null;
+  return {
+    mint: new PublicKey(data.subarray(9, 41)).toBase58(),
+    creator: new PublicKey(data.subarray(41, 73)).toBase58(),
+    price: data.readBigUInt64LE(PRICE_OFFSET).toString(),
+  };
+}
+
+interface ConfigAccount { owner: string; data: [string, string] }
+
 /** One getMultipleAccounts call (≤100 pubkeys) → base64 data per address, in order. */
-async function fetchAccounts(pdas: string[], urls: string[]): Promise<(string | null)[]> {
+async function fetchAccounts(pdas: string[], urls: string[]): Promise<(ConfigAccount | null)[]> {
   const body = JSON.stringify({
     jsonrpc: "2.0",
     id: "agentnet-indexer-price",
@@ -50,12 +59,12 @@ async function fetchAccounts(pdas: string[], urls: string[]): Promise<(string | 
       if (res.status === 429 && i < urls.length - 1) continue;
       if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
       const json = (await res.json()) as {
-        result?: { value: ({ data: [string, string] } | null)[] };
+        result?: { value: (ConfigAccount | null)[] };
         error?: { message?: string };
       };
       if (json.error) throw new Error(`RPC error: ${json.error.message ?? "unknown"}`);
       const value = json.result?.value ?? [];
-      return value.map((a) => a?.data?.[0] ?? null);
+      return value;
     } catch (e) {
       lastErr = e;
       if (i === urls.length - 1) break;
@@ -65,16 +74,16 @@ async function fetchAccounts(pdas: string[], urls: string[]): Promise<(string | 
 }
 
 /**
- * Resolve prices (lamports, as decimal strings) for a list of item mints. Returns
- * a Map mint→price; a mint with no config (or unreadable) is absent. Best-effort:
+ * Resolve creator and price (lamports, as decimal strings) for a list of item mints. Returns
+ * a Map mint→config; a mint with no config (or unreadable) is absent. Best-effort:
  * an RPC failure for a batch leaves those mints unpriced rather than aborting the
  * whole scan. `urls` overridable so a user-RPC fallback can run the same read.
  */
-export async function fetchItemPrices(
+export async function fetchItemConfigs(
   mints: string[],
   urls: string[] = DAS_RPC_URLS,
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+): Promise<Map<string, ItemConfigFields>> {
+  const out = new Map<string, ItemConfigFields>();
   if (mints.length === 0 || urls.length === 0) return out;
 
   for (let i = 0; i < mints.length; i += RPC_BATCH) {
@@ -83,8 +92,10 @@ export async function fetchItemPrices(
     try {
       const datas = await fetchAccounts(pdas, urls);
       slice.forEach((mint, j) => {
-        const price = decodePrice(datas[j]);
-        if (price !== null) out.set(mint, price);
+        const account = datas[j];
+        if (!account || account.owner !== WORKFLOW_GATE_PROGRAM_ID) return;
+        const config = decodeItemConfig(Buffer.from(account.data[0], "base64"));
+        if (config?.mint === mint) out.set(mint, config);
       });
     } catch {
       // leave this batch unpriced — the items still index, just without a price

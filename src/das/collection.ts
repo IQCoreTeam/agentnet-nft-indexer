@@ -14,7 +14,7 @@
 
 import type { IndexedItem, ScanPage, ScanResult, Trait } from "../types";
 import { dasRpc } from "./client";
-import { fetchItemPrices } from "./itemPrice";
+import { fetchItemConfigs, type ItemConfigFields } from "../chain/itemConfig";
 import { BROWSER_URL, GATEWAY_URL } from "../config";
 
 const PAGE_LIMIT = 1000;
@@ -124,16 +124,6 @@ interface DasGroupResult {
   last_indexed_slot?: number;
 }
 
-/** The creator = the mint's update authority (json §4: "recoverable as the
- *  mint's update authority, never a stored trait"). DAS exposes it as the
- *  authority with the "full" scope; fall back to the first verified creator. */
-function creatorOf(a: DasAsset): string | null {
-  const fullAuth = a.authorities?.find((x) => x.scopes?.includes("full")) ?? a.authorities?.[0];
-  if (fullAuth?.address) return fullAuth.address;
-  const verified = a.creators?.find((c) => c.verified) ?? a.creators?.[0];
-  return verified?.address ?? null;
-}
-
 /** supply is the ranking signal (+1 per buy). For a semi-fungible Token-2022
  *  mint DAS reports it under token_info.supply; mpl-style editions use
  *  print_current_supply. Take whichever is present, default 0. */
@@ -156,12 +146,12 @@ export function cleanTraits(attrs: unknown): Trait[] {
 /** Map a DAS asset to an IndexedItem, enriching name/description/image/traits
  *  from the code-in inscription (resolved via the gateway). The gateway JSON is
  *  the source of truth for traits (DAS can't read code-in uris); DAS supplies
- *  supply + creator. Falls back to DAS metadata if the gateway is unavailable. */
+ *  supply. Creator and price come from ItemConfig. Falls back to DAS metadata if the gateway is unavailable. */
 async function toItem(
   a: DasAsset,
   collection: string,
   type: IndexedItem["type"],
-  price: string | null,
+  config: ItemConfigFields | null,
 ): Promise<IndexedItem> {
   const m = a.content?.metadata;
   const code = a.content?.json_uri ? await resolveCodeIn(a.content.json_uri) : null;
@@ -173,9 +163,9 @@ async function toItem(
     name: (code?.name ?? m?.name)?.trim() || a.id,
     description: code?.description ?? m?.description ?? "",
     image: code?.image ?? cardImageUrl(a.id, a.content?.json_uri) ?? imageOf(a),
-    creator: creatorOf(a),
+    creator: config?.creator ?? null,
     supply: supplyOf(a),
-    price, // from the ItemConfig PDA (on-chain source of truth), fetched per page
+    price: config?.price ?? null, // from the ItemConfig PDA (on-chain source of truth), fetched per page
     attributes,
     stars: 0, // stored item carries no stars; the read-side STARS_JOIN computes it
   };
@@ -206,9 +196,9 @@ export async function scanCollectionPage(
   // Batch-read each item's on-chain price from its ItemConfig PDA (one
   // getMultipleAccounts per 100), then merge per item. Best-effort: an unpriced
   // mint just indexes with price = null.
-  const prices = await fetchItemPrices(mine.map((a) => a.id), urls);
+  const configs = await fetchItemConfigs(mine.map((a) => a.id), urls);
   const items = await mapLimit(mine, GATEWAY_CONCURRENCY, (a) =>
-    toItem(a, collection, type, prices.get(a.id) ?? null),
+    toItem(a, collection, type, configs.get(a.id) ?? null),
   );
   // Exhaustion is judged on the RAW page length, not the filtered count — a page
   // can be full of other-collection items and still have more pages to come.
